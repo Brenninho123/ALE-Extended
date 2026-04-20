@@ -6,6 +6,7 @@ import haxe.Timer;
 
 import lime.app.Application;
 import openfl.display.Sprite;
+import openfl.events.KeyboardEvent;
 import openfl.Lib;
 import openfl.ui.Mouse;
 
@@ -39,23 +40,19 @@ import extension.androidtools.os.Build.VERSION_CODES as AndroidVersionCode;
 
 class Main extends Sprite
 {
-	// ================= ENGINE META =================
+	public static inline final ENGINE_NAME:String    = "ALE Extended";
+	public static inline final ENGINE_VERSION:String = "0.1.0";
 
-	public static inline var ENGINE_NAME:String = "ALE Extended";
-	public static inline var ENGINE_VERSION:String = "0.1.0";
+	private static inline final VERSION_URL:String       = "https://raw.githubusercontent.com/ALE-Psych-Crew/ALE-Psych/main/githubVersion.txt";
+	private static inline final VERSION_CHECK_DELAY:Int  = 1000;
 
 	private static var onlineVersion:String = "unknown";
-
-	// ================= CONSTRUCTOR =================
 
 	public function new()
 	{
 		super();
-
 		boot();
 	}
-
-	// ================= BOOT SYSTEM =================
 
 	private function boot():Void
 	{
@@ -67,25 +64,17 @@ class Main extends Sprite
 		postBoot();
 	}
 
-	// ================= PLATFORM =================
-
 	private function initPlatform():Void
 	{
 		#if android
-		if (AndroidVersion.SDK_INT >= AndroidVersionCode.M)
+		if (AndroidVersion.SDK_INT >= AndroidVersionCode.M && !AndroidEnvironment.isExternalStorageManager())
 		{
-			if (!AndroidEnvironment.isExternalStorageManager())
-			{
-				AndroidSettings.requestSetting('MANAGE_APP_ALL_FILES_ACCESS_PERMISSION');
-
-				trace("[BOOT] Missing storage permission. Closing app...");
-				Sys.exit(0);
-			}
+			AndroidSettings.requestSetting('MANAGE_APP_ALL_FILES_ACCESS_PERMISSION');
+			trace("[BOOT] Missing storage permission. Closing app...");
+			Sys.exit(0);
 		}
 		#end
 	}
-
-	// ================= CRASH HANDLER =================
 
 	private function setupCrashHandler():Void
 	{
@@ -97,48 +86,50 @@ class Main extends Sprite
 		#end
 	}
 
+	#if CRASH_HANDLER
 	private function onCrash(e:UncaughtErrorEvent):Void
 	{
-		var msg:String = buildCrashReport(e);
+		final msg = buildCrashReport(e);
 
 		trace(msg);
 
 		#if WINDOWS_API
-		api.DesktopAPI.showMessageBox(msg, ENGINE_NAME + " Crash", ERROR);
+		api.DesktopAPI.showMessageBox(msg, '$ENGINE_NAME Crash', ERROR);
 		#else
-		Application.current.window.alert(msg, ENGINE_NAME + " Crash");
+		Application.current.window.alert(msg, '$ENGINE_NAME Crash');
 		#end
 
 		shutdown();
 		Sys.exit(1);
 	}
 
-	private function buildCrashReport(e:Dynamic):String
+	private function buildCrashReport(e:UncaughtErrorEvent):String
 	{
-		var report:String = "=== CRASH REPORT ===\n";
+		final sb = new StringBuf();
 
-		for (stackItem in CallStack.exceptionStack(true))
+		sb.add("=== CRASH REPORT ===\n");
+
+		for (item in CallStack.exceptionStack(true))
 		{
-			switch (stackItem)
+			switch (item)
 			{
 				case FilePos(_, file, line, _):
-					report += file + ":" + line + "\n";
-				default:
+					sb.add('$file:$line\n');
+				case _:
 			}
 		}
 
-		report += "\nError: " + e.error;
-		report += "\nEngine: " + ENGINE_NAME + " " + ENGINE_VERSION;
+		sb.add('\nError: ${e.error}');
+		sb.add('\nEngine: $ENGINE_NAME $ENGINE_VERSION');
 
-		return report;
+		return sb.toString();
 	}
-
-	// ================= ENV =================
+	#end
 
 	private function setupEnvironment():Void
 	{
 		#if android
-		var path:String = AndroidEnvironment.getExternalStorageDirectory() + "/." + Lib.application.meta.get('file');
+		final path = '${AndroidEnvironment.getExternalStorageDirectory()}/.${Lib.application.meta.get("file")}';
 
 		if (!sys.FileSystem.exists(path))
 			sys.FileSystem.createDirectory(path);
@@ -149,14 +140,10 @@ class Main extends Sprite
 		Lib.application.window.onClose.add(shutdown);
 	}
 
-	// ================= GAME START =================
-
 	private function startGame():Void
 	{
 		addChild(new Game(MainState));
 	}
-
-	// ================= POST BOOT =================
 
 	private function postBoot():Void
 	{
@@ -165,8 +152,6 @@ class Main extends Sprite
 		setupVideo();
 		checkVersionAsync();
 	}
-
-	// ================= WINDOW =================
 
 	private function setupWindow():Void
 	{
@@ -181,24 +166,20 @@ class Main extends Sprite
 
 	private function centerWindow():Void
 	{
-		var win = Application.current.window;
+		final win = Application.current.window;
 
-		win.x = Std.int((win.display.bounds.width - win.width) / 2);
+		win.x = Std.int((win.display.bounds.width  - win.width)  / 2);
 		win.y = Std.int((win.display.bounds.height - win.height) / 2);
 	}
 
-	// ================= INPUT =================
-
 	private function setupInput():Void
 	{
-		FlxG.stage.addEventListener('keyDown', (event) ->
+		FlxG.stage.addEventListener(KeyboardEvent.KEY_DOWN, (e:KeyboardEvent) ->
 		{
-			if (event.altKey && event.keyCode == FlxKey.ENTER)
-				event.stopImmediatePropagation();
+			if (e.altKey && e.keyCode == FlxKey.ENTER)
+				e.stopImmediatePropagation();
 		});
 	}
-
-	// ================= VIDEO =================
 
 	private function setupVideo():Void
 	{
@@ -207,37 +188,31 @@ class Main extends Sprite
 		#end
 	}
 
-	// ================= VERSION CHECK =================
-
 	private function checkVersionAsync():Void
 	{
 		Timer.delay(() ->
 		{
 			try
 			{
-				var http = new Http("https://raw.githubusercontent.com/-Psych-Crew/-Psych/main/githubVersion.txt");
+				final http = new Http(VERSION_URL);
 
 				http.onData = (data:String) ->
 				{
 					onlineVersion = data.split("\n")[0].trim();
-					trace("[VERSION] Online: " + onlineVersion);
+					trace('[VERSION] Online: $onlineVersion');
 				};
 
-				http.onError = (err) ->
-				{
-					trace("[VERSION ERROR] " + err);
-				};
+				http.onError = (err:String) ->
+					trace('[VERSION ERROR] $err');
 
 				http.request();
 			}
 			catch (e)
 			{
-				trace("[VERSION FAIL] " + e);
+				trace('[VERSION FAIL] $e');
 			}
-		}, 1000);
+		}, VERSION_CHECK_DELAY);
 	}
-
-	// ================= SHUTDOWN =================
 
 	public static function shutdown():Void
 	{
@@ -258,26 +233,24 @@ class Main extends Sprite
 		CoolUtil.destroy();
 	}
 
-	// ================= RESET =================
-
 	public static function reset():Void
 	{
 		trace("[SYSTEM] Resetting engine...");
 
 		shutdown();
-
 		FlxG.resetGame();
 	}
-
-	// ================= POST RESET =================
 
 	public static function postReset():Void
 	{
 		trace("[SYSTEM] Post reset init...");
 
 		FlxG.fixedTimestep = false;
-		FlxG.mouse.visible = true;
+
+		#if desktop
+		FlxG.mouse.visible       = true;
 		FlxG.mouse.useSystemCursor = true;
+		#end
 
 		Paths.clear(true, true);
 		Paths.init();
@@ -293,10 +266,7 @@ class Main extends Sprite
 		PluginsHandler.init();
 
 		#if LUA_ALLOWED
-		LuaError.errorHandler = (e:String) ->
-		{
-			trace("[LUA ERROR] " + e);
-		};
+		LuaError.errorHandler = (e:String) -> trace('[LUA ERROR] $e');
 		#end
 	}
 }
