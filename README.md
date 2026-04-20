@@ -1,5 +1,5 @@
 <h1 align="center">
-  <img src="art/githubLogo.png" alt="ALE Psych Logo">
+  <img src="art/githubLogo.png" alt="ALE Extended Logo">
 </h1>
 
 <h2 align="center"><em><strong>"If Psych was so good, why wasn’t there a Psych 2?"</strong></em></h2>
